@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name        网页文本链接智能高亮与增强
 // @namespace   http://tampermonkey.net/
-// @version     3.6
-// @description 智能识别文本链接，新增防抖、显示截断、排除类名、Unicode域名等深度开发者选项。
+// @version     3.7
+// @description 智能识别文本链接，开放外边距、内边距、动画时间、缓存清理比例等细节配置，修复TLD边界硬编码。
 // @author      LMaxRouterCN
 // @match       *://*/*
 // @grant       GM_setValue
@@ -74,10 +74,17 @@
             titleFetchRegex: '/<title>([^<]*)<\\/title>/i',
 
             // 新增深度选项
-            debounceDelay: 200,       // 防抖延迟
-            maxDisplayLength: 0,      // 最大显示长度 (0为不限)
-            excludeClassNames: '',    // 排除的类名
-            allowUnicodeDomains: false // 允许中文/国际化域名
+            debounceDelay: 200,
+            maxDisplayLength: 0,
+            excludeClassNames: '',
+            allowUnicodeDomains: false,
+
+            // 新增：样式与逻辑细节
+            wrapperMargin: '0 2px',      // CSS margin
+            wrapperPadding: '0 2px',     // CSS padding
+            transitionDuration: '0.2s',  // 动画时间
+            tldBoundaryChars: 'a-zA-Z0-9-', // TLD后缀边界检查字符
+            cacheCleanupRatio: 0.5       // 缓存清理比例
         }
     };
 
@@ -117,7 +124,6 @@
         // 域名主体字符集
         let domainChars = dev.domainChars;
         if (dev.allowUnicodeDomains) {
-            // 扩展域名允许字符范围，包含常见非拉丁字符
             domainChars += '\\u0080-\\uFFFF';
         }
 
@@ -143,7 +149,11 @@
         // 部分 B: 裸域名
         if (!dev.strictHttpMode && dev.allowedTLDs.trim().length > 0) {
             const tlds = dev.allowedTLDs.split('|').map(s => s.trim()).filter(s => s).join('|');
-            const suffixBoundary = `(?![a-zA-Z0-9-])`;
+
+            // 使用开发者选项中的边界字符
+            // 逻辑：如果后缀后面紧跟这些字符，说明后缀是更长单词的一部分（如 minecraft.network -> network后跟w）
+            const suffixBoundary = `(?![${dev.tldBoundaryChars}])`;
+
             patternParts.push(`[${domainChars}]+\\.(?:${tlds})${suffixBoundary}${exclusionSet}*`);
         }
 
@@ -214,13 +224,20 @@
 
             return css;
         };
+
+        // 读取开发者样式配置
+        const dev = config.devSettings;
+        const margin = dev.wrapperMargin || '0 2px';
+        const padding = dev.wrapperPadding || '0 2px';
+        const transTime = dev.transitionDuration || '0.2s';
+
         let baseCss = `
             .smart-link-wrapper {
                 cursor: pointer;
-                margin: 0 2px;
-                padding: 0 2px;
+                margin: ${margin};
+                padding: ${padding};
                 display: inline-block;
-                transition: all 0.2s;
+                transition: all ${transTime};
                 box-decoration-break: clone;
                 -webkit-box-decoration-break: clone;
                 ${generateCss(config.styles.default)}
@@ -258,8 +275,10 @@
         }
 
         if (titleCache.size > config.devSettings.titleCacheLimit) {
+            // 使用开发者选项中的清理比例
+            const ratio = config.devSettings.cacheCleanupRatio || 0.5;
             const keys = titleCache.keys();
-            const limit = Math.floor(config.devSettings.titleCacheLimit / 2);
+            const limit = Math.floor(config.devSettings.titleCacheLimit * ratio);
             for(let i=0; i<limit; i++) titleCache.delete(keys.next().value);
         }
 
@@ -350,10 +369,8 @@
         const excludeTags = config.devSettings.excludeTags.toUpperCase().split(',').map(s => s.trim());
         if (excludeTags.includes(parentTag)) return;
 
-        // 新增：检查排除类名
         if (config.devSettings.excludeClassNames && config.devSettings.excludeClassNames.trim().length > 0) {
             const excludeClasses = config.devSettings.excludeClassNames.split(',').map(s => s.trim().toLowerCase()).filter(s => s);
-            // 检查当前元素及其所有父元素的类名
             let el = textNode.parentNode;
             while (el && el !== document.body) {
                 if (el.classList) {
@@ -392,12 +409,10 @@
             const wrapper = document.createElement('span');
             wrapper.className = 'smart-link-wrapper';
 
-            // 新增：显示长度截断逻辑
             let displayText = cleanUrl;
             const maxLen = config.devSettings.maxDisplayLength;
             if (maxLen > 0 && displayText.length > maxLen) {
                 displayText = displayText.substring(0, maxLen) + '...';
-                // 添加 title 提示完整链接
                 wrapper.title = cleanUrl;
             }
 
@@ -479,7 +494,6 @@
             const hasStyles = config.styles.default.textColorEnabled || config.styles.default.borderEnabled;
             if (!hasStyles && !config.enableTitleFetch) return;
 
-            // 开发选项：防抖处理
             if (config.devSettings.debounceDelay > 0) {
                 clearTimeout(debounceTimer);
                 debounceTimer = setTimeout(() => {
@@ -491,7 +505,6 @@
                     }
                 }, config.devSettings.debounceDelay);
             } else {
-                // 无防抖，立即执行
                 for (let mutation of mutations) {
                     for (let node of mutation.addedNodes) {
                         if (node.nodeType === Node.ELEMENT_NODE) walk(node);
@@ -547,7 +560,7 @@
 
         panel.innerHTML = `
             <div style="position: fixed; top: 10px; right: 10px; background: #2b2b2b; border: 1px solid #555; padding: 15px; z-index: 99999; box-shadow: 0 0 15px rgba(0,0,0,0.5); font-family: sans-serif; font-size: 14px; border-radius: 8px; width: 420px; max-height: 90vh; overflow-y: auto; color: #eee;">
-                <h3 style="margin: 0 0 10px; font-size: 16px; color: #fff; border-bottom: 1px solid #444; padding-bottom: 8px;">链接增强设置 v3.6</h3>
+                <h3 style="margin: 0 0 10px; font-size: 16px; color: #fff; border-bottom: 1px solid #444; padding-bottom: 8px;">链接增强设置 v3.7</h3>
 
                 <!-- 样式配置区域 -->
                 <div style="background: #333; border: 1px solid #444; padding: 8px; border-radius: 4px; margin-bottom: 10px;">
@@ -637,6 +650,29 @@
 
                     <div style="background: #333; padding: 8px; border-radius: 4px; border: 1px solid #444;">
 
+                        <!-- 样式细节 -->
+                         <div style="border-bottom: 1px dashed #666; margin-bottom: 8px; padding-bottom: 8px;">
+                            <div style="font-weight: bold; color: #ff9999; margin-bottom: 5px;">样式与排版细节</div>
+
+                            <div style="margin-bottom: 8px;">
+                                <label style="color: #ddd; display: block; margin-bottom: 3px;">Wrapper Margin (CSS):</label>
+                                <input type="text" id="cfg-margin" value="${config.devSettings.wrapperMargin}" style="width: 100%; box-sizing: border-box; background: #444; color: #fff; border: 1px solid #555; font-size: 11px;">
+                                <div style="font-size: 10px; color: #aaa; margin-top: 2px;">链接与周围文字的间距，如: 0 2px</div>
+                            </div>
+
+                            <div style="margin-bottom: 8px;">
+                                <label style="color: #ddd; display: block; margin-bottom: 3px;">Wrapper Padding (CSS):</label>
+                                <input type="text" id="cfg-padding" value="${config.devSettings.wrapperPadding}" style="width: 100%; box-sizing: border-box; background: #444; color: #fff; border: 1px solid #555; font-size: 11px;">
+                                <div style="font-size: 10px; color: #aaa; margin-top: 2px;">链接内容与边框的距离，如: 0 2px</div>
+                            </div>
+
+                             <div style="margin-bottom: 8px;">
+                                <label style="color: #ddd; display: block; margin-bottom: 3px;">过渡动画时间 (秒):</label>
+                                <input type="text" id="cfg-trans" value="${config.devSettings.transitionDuration}" style="width: 60px; background: #444; color: #fff; border: 1px solid #555; font-size: 11px;">
+                                <div style="font-size: 10px; color: #aaa; margin-top: 2px;">如 0.2s，设为 0s 关闭动画。</div>
+                            </div>
+                        </div>
+
                         <!-- 标题提取设置 -->
                         <div style="border-bottom: 1px dashed #666; margin-bottom: 8px; padding-bottom: 8px;">
                             <div style="font-weight: bold; color: #ff9999; margin-bottom: 5px;">标题提取设置</div>
@@ -644,6 +680,11 @@
                                 <label style="color: #ddd; display: block; margin-bottom: 3px;">获取标题正则 (需含捕获组):</label>
                                 <input type="text" id="cfg-title-fetch-regex" value="${config.devSettings.titleFetchRegex}" style="width: 100%; box-sizing: border-box; background: #444; color: #fff; border: 1px solid #555; font-size: 11px;">
                                 <div style="font-size: 10px; color: #aaa; margin-top: 2px;">用于从HTML源码中提取标题。默认: /&lt;title&gt;([^&lt;]*)&lt;\/title&gt;/i</div>
+                            </div>
+                             <div style="margin-bottom: 8px;">
+                                <label style="color: #ddd; display: block; margin-bottom: 3px;">缓存清理比例:</label>
+                                <input type="number" id="cfg-cache-ratio" value="${config.devSettings.cacheCleanupRatio}" step="0.1" min="0.1" max="0.9" style="width: 60px; background: #444; color: #fff; border: 1px solid #555;">
+                                <div style="font-size: 10px; color: #aaa; margin-top: 2px;">当缓存满时，清理旧数据的比例 (0.1 - 0.9)。</div>
                             </div>
                         </div>
 
@@ -667,6 +708,12 @@
                                 <label style="color: #ddd; display: block; margin-bottom: 3px;">域名主体字符集:</label>
                                 <input type="text" id="cfg-domain-chars" value="${config.devSettings.domainChars}" style="width: 100%; box-sizing: border-box; background: #444; color: #fff; border: 1px solid #555; font-size: 11px;">
                                 <div style="font-size: 10px; color: #aaa; margin-top: 2px;">定义裸域名点号前允许出现的字符。</div>
+                            </div>
+
+                            <div style="margin-bottom: 8px;">
+                                <label style="color: #ddd; display: block; margin-bottom: 3px;">TLD 边界检查字符:</label>
+                                <input type="text" id="cfg-tld-boundary" value="${config.devSettings.tldBoundaryChars}" style="width: 100%; box-sizing: border-box; background: #444; color: #fff; border: 1px solid #555; font-size: 11px;">
+                                <div style="font-size: 10px; color: #aaa; margin-top: 2px;">后缀后若紧跟这些字符，则判定为非链接。</div>
                             </div>
 
                             <div style="margin-bottom: 8px; display: flex; justify-content: space-between;">
@@ -865,7 +912,7 @@
                 document.getElementById(id).onchange = (e) => {
                     let val = e.target.value;
                     if (isNumber) {
-                        val = parseInt(val, 10);
+                        val = parseFloat(val);
                         if (isNaN(val)) val = defaultConfig.devSettings[key];
                     }
                     config.devSettings[key] = val;
@@ -886,10 +933,17 @@
             simpleInputBinder('cfg-cache', 'titleCacheLimit', true, false);
             simpleInputBinder('cfg-debounce', 'debounceDelay', true, false);
 
+            // 新增样式绑定
+            simpleInputBinder('cfg-margin', 'wrapperMargin', false, false);
+            simpleInputBinder('cfg-padding', 'wrapperPadding', false, false);
+            simpleInputBinder('cfg-trans', 'transitionDuration', false, false);
+            simpleInputBinder('cfg-cache-ratio', 'cacheCleanupRatio', true, false);
+
             simpleInputBinder('cfg-protocols', 'protocols', false, true);
             simpleInputBinder('cfg-prefixes', 'prefixes', false, true);
             simpleInputBinder('cfg-domain-chars', 'domainChars', false, true);
             simpleInputBinder('cfg-title-fetch-regex', 'titleFetchRegex', false, false);
+            simpleInputBinder('cfg-tld-boundary', 'tldBoundaryChars', false, true);
 
             document.getElementById('cfg-ip-match').onchange = (e) => {
                 config.devSettings.enableIpMatch = e.target.checked;
@@ -923,6 +977,15 @@
             simpleInputBinder('cfg-tlds', 'allowedTLDs', false, true);
             simpleInputBinder('cfg-stop-chars', 'stopChars', false, true);
             simpleInputBinder('cfg-trim-chars', 'trimChars', false, true);
+
+            // 样式相关需要重新应用CSS
+            ['cfg-margin', 'cfg-padding', 'cfg-trans'].forEach(id => {
+                document.getElementById(id).onchange = (e) => {
+                     config.devSettings[e.target.dataset.key || id.replace('cfg-','')] = e.target.value;
+                     saveConfig();
+                     applyStyles();
+                };
+            });
         };
         bindDevEvents();
 
