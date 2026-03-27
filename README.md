@@ -2,9 +2,11 @@
 # 网页文本链接智能高亮与增强
 [![License](https://img.shields.io/badge/License-MPL_2.0-blue.svg)](LICENSE)
 ### 📖 简介
-这是一个功能强大的油猴脚本，旨在提升网页浏览体验。它能智能识别网页中未被处理的各种纯文本链接（如 `http://`、`www.` 开头的文本，甚至 `baidu.com` 等裸域名），将其转换为可点击的超链接，并提供极致细化的样式定制、网页标题获取、黑白名单过滤等功能。
+
+这是一个功能强大的油猴脚本，旨在提升网页浏览体验。它能智能识别网页中未被处理的各种纯文本链接（如 `http://`、`www.` 开头的文本，甚至 `百度一下，你就知道` 等裸域名），将其转换为可点击的超链接，并提供极致细化的样式定制、网页标题获取、黑白名单过滤等功能。
 **v3.7 更新亮点**：新增“开发者选项”面板，开放了从正则核心参数到 DOM 遍历规则的数十项底层配置，支持裸域名智能识别、防抖优化、显示截断等高级功能。
 告别网页中那些“看得见却点不了”的纯文本链接，让浏览更高效。
+
 ---
 ### ✨ 核心功能
 #### 1. 智能识别与转换
@@ -45,8 +47,8 @@
 *   **开发者选项区**：位于面板底部，醒目的红色警示区域，包含所有底层参数配置。
 ---
 ### 🛠 安装方法
-1.  安装用户脚本管理器（如 [Tampermonkey](https://www.tampermonkey.net/) 或 Violentmonkey）。
-2.  复制 [网页文本链接智能高亮与增强.js](https://github.com/LMaxRouterCN/Smart-Link-Highlighter-Enhancer/blob/main/%E7%BD%91%E9%A1%B5%E6%96%87%E6%9C%AC%E9%93%BE%E6%8E%A5%E6%99%BA%E8%83%BD%E9%AB%98%E4%BA%AE%E4%B8%8E%E5%A2%9E%E5%BC%BA.js) 的内容，点击扩展图标菜单右上角的“+”“创建新脚本”，全选并粘贴文本，点击保存。
+1.  安装用户脚本管理器（如 [Tampermonkey](首页 | Tampermonkey) 或 Violentmonkey）。
+2.  复制 [网页文本链接智能高亮与增强.js](Smart-Link-Highlighter-Enhancer/网页文本链接智能高亮与增强.js at main · LMaxRouterCN/Smart-Link-Highlighter-Enhancer) 的内容，点击扩展图标菜单右上角的“+”“创建新脚本”，全选并粘贴文本，点击保存。
 ---
 ### 📝 使用指南
 #### 如何打开设置？
